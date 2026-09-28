@@ -3,7 +3,6 @@ nodes/fetch_extract.py — Fetch & Extract node.
 
 Fetches pages concurrently and extracts main content.
 Handles timeouts, 404s, empty content, and logs all failures.
-This is where the "deliberate failure" handling lives.
 """
 
 import time

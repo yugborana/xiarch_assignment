@@ -2,7 +2,6 @@
 nodes/source_selection.py — Source Selection node.
 
 Decides the search strategy based on query type.
-This is the "autonomous source selection" bonus feature.
 """
 
 import time

@@ -2,7 +2,7 @@
 nodes/planning.py — Planning node.
 
 Produces a visible planning trace: the steps the agent will take
-and which tools it will use. This satisfies the "legible plan" requirement.
+and which tools it will use.
 """
 
 import json
