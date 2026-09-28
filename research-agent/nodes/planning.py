@@ -72,81 +72,112 @@ def planning_node(state: dict) -> dict:
             f"Please reformulate the search queries to be broader or use different terms."
         )
 
-    try:
-        raw = groq_chat(
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": (
-                    f"Research goal: {goal}\n"
-                    f"Parsed query: {json.dumps(parsed_query)}"
-                    f"{replan_context}"
-                )},
-            ],
-            temperature=0.3,
-            max_tokens=800,
-        )
+    # Attempt planning with retry for malformed JSON
+    max_attempts = 2
+    messages = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content": (
+            f"Research goal: {goal}\n"
+            f"Parsed query: {json.dumps(parsed_query)}"
+            f"{replan_context}"
+        )},
+    ]
 
-        # Parse JSON
-        json_str = raw
-        if "```" in json_str:
-            json_str = json_str.split("```")[1]
-            if json_str.startswith("json"):
-                json_str = json_str[4:]
-            json_str = json_str.strip()
+    for attempt in range(1, max_attempts + 1):
+        try:
+            if attempt > 1:
+                messages.append({
+                    "role": "user",
+                    "content": (
+                        "Your previous response was not valid JSON. "
+                        "Please respond with ONLY valid JSON. No markdown, no explanation. "
+                        "Use only plain ASCII quotes, no smart quotes."
+                    ),
+                })
 
-        plan_data = json.loads(json_str)
+            raw = groq_chat(
+                messages=messages,
+                temperature=0.3,
+                max_tokens=800,
+            )
 
-        steps = plan_data.get("steps", [f"Research '{goal}'"])
-        search_queries = plan_data.get("search_queries", [parsed_query.get("topic", goal)])
+            # Extract JSON from markdown code blocks if present
+            json_str = raw
+            if "```" in json_str:
+                json_str = json_str.split("```")[1]
+                if json_str.startswith("json"):
+                    json_str = json_str[4:]
+                json_str = json_str.strip()
 
-        duration_ms = (time.time() - start_time) * 1000
-        tool_log_entry["output"] = plan_data
-        tool_log_entry["duration_ms"] = duration_ms
+            # Repair common JSON issues from LLMs
+            json_str = json_str.replace("\u2018", "'").replace("\u2019", "'")  # smart single quotes
+            json_str = json_str.replace("\u201c", '"').replace("\u201d", '"')  # smart double quotes
+            json_str = json_str.replace("\u2013", "-").replace("\u2014", "-")  # en/em dashes
+            import re
+            json_str = re.sub(r',\s*([}\]])', r'\1', json_str)  # trailing commas
 
-        # Print plan for visibility
-        print("\n" + "=" * 60, flush=True)
-        print("RESEARCH PLAN", flush=True)
-        print("=" * 60, flush=True)
-        for i, step in enumerate(steps, 1):
-            print(f"  {i}. {step}", flush=True)
-        print(f"  Search queries: {search_queries}", flush=True)
-        print("=" * 60 + "\n", flush=True)
+            plan_data = json.loads(json_str)
 
-        return {
-            "plan": steps,
-            "search_queries": search_queries,
-            "tool_call_log": state.get("tool_call_log", []) + [tool_log_entry],
-        }
+            steps = plan_data.get("steps", [f"Research '{goal}'"])
+            search_queries = plan_data.get("search_queries", [parsed_query.get("topic", goal)])
 
-    except Exception as e:
-        logger.error(f"Planning failed: {e}")
+            duration_ms = (time.time() - start_time) * 1000
+            tool_log_entry["output"] = plan_data
+            tool_log_entry["duration_ms"] = duration_ms
 
-        # Fallback plan
-        topic = parsed_query.get("topic", goal)
-        fallback_steps = [
-            f"Search for '{topic}' using web search",
-            "Fetch and extract content from top results",
-            "Filter for relevance and remove duplicates",
-            "Synthesize findings into structured report",
-            "Export report as Markdown",
-        ]
-        fallback_queries = [topic]
+            # Print plan for visibility
+            print("\n" + "=" * 60, flush=True)
+            print("RESEARCH PLAN", flush=True)
+            print("=" * 60, flush=True)
+            for i, step in enumerate(steps, 1):
+                print(f"  {i}. {step}", flush=True)
+            print(f"  Search queries: {search_queries}", flush=True)
+            print("=" * 60 + "\n", flush=True)
 
-        duration_ms = (time.time() - start_time) * 1000
-        tool_log_entry["output"] = {"steps": fallback_steps, "search_queries": fallback_queries}
-        tool_log_entry["error"] = str(e)
-        tool_log_entry["duration_ms"] = duration_ms
+            return {
+                "plan": steps,
+                "search_queries": search_queries,
+                "tool_call_log": state.get("tool_call_log", []) + [tool_log_entry],
+            }
 
-        print("\n" + "=" * 60, flush=True)
-        print("RESEARCH PLAN (fallback)", flush=True)
-        print("=" * 60, flush=True)
-        for i, step in enumerate(fallback_steps, 1):
-            print(f"  {i}. {step}", flush=True)
-        print("=" * 60 + "\n", flush=True)
+        except json.JSONDecodeError as e:
+            logger.warning(f"Planning attempt {attempt}: JSON parse failed: {e}")
+            if attempt < max_attempts:
+                continue  # Retry with corrective prompt
 
-        return {
-            "plan": fallback_steps,
-            "search_queries": fallback_queries,
-            "tool_call_log": state.get("tool_call_log", []) + [tool_log_entry],
-            "errors": state.get("errors", []) + [f"Planning fallback used: {e}"],
-        }
+        except Exception as e:
+            logger.error(f"Planning failed on attempt {attempt}: {e}")
+            break # Break out of loop to trigger fallback
+
+    # If we get here, it means all attempts failed or we broke out of the loop
+    logger.error("Planning failed after all attempts. Using fallback.")
+
+    # Fallback plan
+    topic = parsed_query.get("topic", goal)
+    fallback_steps = [
+        f"Search for '{topic}' using web search",
+        "Fetch and extract content from top results",
+        "Filter for relevance and remove duplicates",
+        "Synthesize findings into structured report",
+        "Export report as Markdown",
+    ]
+    fallback_queries = [topic]
+
+    duration_ms = (time.time() - start_time) * 1000
+    tool_log_entry["output"] = {"steps": fallback_steps, "search_queries": fallback_queries}
+    tool_log_entry["error"] = "Planning failed after all attempts"
+    tool_log_entry["duration_ms"] = duration_ms
+
+    print("\n" + "=" * 60, flush=True)
+    print("RESEARCH PLAN (fallback)", flush=True)
+    print("=" * 60, flush=True)
+    for i, step in enumerate(fallback_steps, 1):
+        print(f"  {i}. {step}", flush=True)
+    print("=" * 60 + "\n", flush=True)
+
+    return {
+        "plan": fallback_steps,
+        "search_queries": fallback_queries,
+        "tool_call_log": state.get("tool_call_log", []) + [tool_log_entry],
+        "errors": state.get("errors", []) + ["Planning fallback used due to parse failure"],
+    }

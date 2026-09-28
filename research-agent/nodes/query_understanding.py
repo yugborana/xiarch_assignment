@@ -65,6 +65,13 @@ def query_understanding_node(state: dict) -> dict:
                 json_str = json_str[4:]
             json_str = json_str.strip()
 
+        # Repair common JSON issues from LLMs
+        import re
+        json_str = json_str.replace("\u2018", "'").replace("\u2019", "'")  # smart single quotes
+        json_str = json_str.replace("\u201c", '"').replace("\u201d", '"')  # smart double quotes
+        json_str = json_str.replace("\u2013", "-").replace("\u2014", "-")  # en/em dashes
+        json_str = re.sub(r',\s*([}\]])', r'\1', json_str)  # trailing commas
+
         parsed_query = json.loads(json_str)
 
         # Validate required fields
