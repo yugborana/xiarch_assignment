@@ -3,10 +3,10 @@
 ## Design Decisions
 
 ### Orchestration: LangGraph
-I chose LangGraph over a plain Python state machine because the graph structure directly maps to the architecture spec's state diagram. Each node is a self-contained function, and the conditional edges (memory cache, coverage replan) are expressed declaratively rather than buried in if/else chains. This makes the "legible plan" requirement trivially visible — the graph *is* the plan's skeleton.
+I chose LangGraph over a plain Python state machine because the graph structure directly maps to the architecture spec's state diagram. Each node is a self-contained function, and the conditional edges (memory cache, coverage replan) are expressed declaratively rather than buried in if/else chains.
 
 ### Embeddings: ChromaDB ONNX vs sentence-transformers
-The architecture spec originally called for `sentence-transformers` with `all-MiniLM-L6-v2`. I replaced this with ChromaDB's built-in ONNX runtime, which ships the same model but runs on ONNX Runtime instead of PyTorch. The trade-off: identical embedding quality with ~2GB less disk/install overhead. The `tools/embeddings.py` module provides `embed_texts()`, `embed_query()`, and `get_chroma_embedding_function()` as a clean API boundary.
+Originally planned for `sentence-transformers` with `all-MiniLM-L6-v2`. I replaced this with ChromaDB's built-in ONNX runtime, which ships the same model but runs on ONNX Runtime instead of PyTorch. The trade-off: identical embedding quality with ~2GB less disk/install overhead. The `tools/embeddings.py` module provides `embed_texts()`, `embed_query()`, and `get_chroma_embedding_function()` as a clean API boundary.
 
 ### Search: Tavily with pre-extracted content
 Initially DuckDuckGo was used (zero-signup), but it proved unreliable due to aggressive rate limiting that caused frequent search failures. I switched to Tavily, which provides two key advantages: (1) high-quality search results with pre-extracted `raw_content` that can be passed directly to the pipeline, reducing redundant network calls, and (2) a generous free tier of 1,000 searches/month. The agent surfaces clear error messages if the Tavily quota is exhausted.
