@@ -15,8 +15,7 @@ An autonomous AI agent that accepts a research query, searches the web, extracts
 - **Rate Limit Resilience** — Automatic retry with exponential backoff for Groq API rate limits
 
 ## Architecture
-
-
+<img width="1010" height="1146" alt="image" src="https://github.com/user-attachments/assets/dc3593e6-288d-4c87-acce-39533d0ed548" />
 
 ## Tech Stack
 
