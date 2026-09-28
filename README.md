@@ -123,8 +123,6 @@ research-agent/
 ├── memory/
 │   └── past_searches.db  # Created at runtime
 ├── output/               # Generated reports
-└── tests/
-    └── test_tools.py
 ```
 
 ## Self-Correction Mechanisms
