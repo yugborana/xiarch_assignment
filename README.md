@@ -124,7 +124,7 @@ research-agent/
 │   └── export_node.py
 ├── memory/
 │   └── past_searches.db  # Created at runtime
-├── output/               # Generated reports
+├── test_runs/               # Generated reports
 ```
 
 ## Self-Correction Mechanisms
